@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         测试
 // @namespace    http://tampermonkey.net/
-// @version      2024-01-14
+// @version      v0.1.0
 // @description  try to take over the world!
 // @author       WingLee
 // @match        http://eqshare.just.edu.cn/model/yqkf/*
@@ -13,17 +13,26 @@
 
 // 要预约的设备信息
 var requiredDeviceInfoObj = {};
+var document = window.top.document;
 
 (function() {
+    // console.log(window.location.pathname)
+    // console.log(document.location.pathname)
     console.log('------页面更新------')
+    console.log('接收数据')
     console.log(GM_getValue('requiredDeviceInfoObj'))
+    console.log('数据结束')
     requiredDeviceInfoObj = GM_getValue('requiredDeviceInfoObj')
-    requiredDeviceInfoObj.bookTime = new Date(requiredDeviceInfoObj.bookTime)
+    requiredDeviceInfoObj.bookTime = new Date(requiredDeviceInfoObj.bookTime) // 将数据中的日期规格化
     // console.log(requiredDeviceInfoObj.bookTime)
 
     // 插入一个侧边框用于预约设置
     SidebarSetting()
 
+    // 错过设置时间太久, 自动停止预约
+    if ((new Date() - requiredDeviceInfoObj.bookTime) > 60000) {
+        requiredDeviceInfoObj.bookProgress = -1
+    }
 
     // requiredDeviceInfoObj.bookProgress 预约进度 -1不抢|0等待定时预约|1搜索设备送样检测|2日历选择|3填表提交|4完成
     if (requiredDeviceInfoObj.bookProgress === 0) {
@@ -36,7 +45,10 @@ var requiredDeviceInfoObj = {};
         Step3Form()
     } else if (requiredDeviceInfoObj.bookProgress === 4) {
         StopBook()
+    } else {
+        document.querySelector('#status-bar-id').textContent = ('正在设置预约参数...')
     }
+
 })();
 
 
@@ -50,29 +62,28 @@ function WaitStart() {
 
     // 若到抢设备时间
     if ((bookTime - new Date()) <= 0) {
-        document.querySelector('#status-bar-id').textContent = ('开始抢设备');
+        document.querySelector('#status-bar-id').textContent = ('开始抢设备')
         requiredDeviceInfoObj.bookProgress = 1
         GM_setValue('requiredDeviceInfoObj', requiredDeviceInfoObj)
         Step1Search()
     } else {
         // 获取小时、分钟和秒
-        var hours = bookTime.getHours();
-        var minutes = bookTime.getMinutes();
-        var seconds = bookTime.getSeconds();
-
+        var hours = bookTime.getHours()
+        var minutes = bookTime.getMinutes()
+        var seconds = bookTime.getSeconds()
         // 格式化时间，确保单个数字前面有零（例如，09:05:02）
-        hours = (hours < 10) ? "0" + hours : hours;
-        minutes = (minutes < 10) ? "0" + minutes : minutes;
-        seconds = (seconds < 10) ? "0" + seconds : seconds;
+        hours = (hours < 10) ? "0" + hours : hours
+        minutes = (minutes < 10) ? "0" + minutes : minutes
+        seconds = (seconds < 10) ? "0" + seconds : seconds
 
         // 构建显示时间的字符串
-        var currentBookTime = hours + ":" + minutes + ":" + seconds;
+        var currentBookTime = hours + ":" + minutes + ":" + seconds
         // 如果条件不满足，等待一段时间后再次检查
         if ((bookTime - new Date()) > 60000) {
-            document.querySelector('#status-bar-id').textContent = ('开始时间为' + currentBookTime + ', 距离开始预约还剩' + Math.floor(((bookTime-new Date()) / 1000)) + '秒');
+            document.querySelector('#status-bar-id').textContent = ('开始时间为' + currentBookTime + ', 距离开始预约还剩' + Math.floor(((bookTime-new Date()) / 1000)) + '秒')
             setTimeout(WaitStart, 10000); // 慢速10秒
         } else {
-            document.querySelector('#status-bar-id').textContent = ('开始时间为' + currentBookTime + ', 距离开始预约还剩' + ((bookTime-new Date()) / 1000) + '秒');
+            document.querySelector('#status-bar-id').textContent = ('开始时间为' + currentBookTime + ', 距离开始预约还剩' + ((bookTime-new Date()) / 1000) + '秒')
             setTimeout(WaitStart, 100); // 快0.1秒刷新
         }
     }
@@ -84,18 +95,19 @@ function Step1Search() {
         return ;
     }
     //if (window.location.pathname != '/model/yqkf/equipmentlist.html') {
-        //window.location.href = 'http://eqshare.just.edu.cn/model/yqkf/equipmentlist.html';
+        //window.location.href = 'http://eqshare.just.edu.cn/model/yqkf/equipmentlist.html'
     //}
+
     // 第一步实现找到设备并点击预约按钮
     console.log('------第一步找设备------')
     // 根据上面信息搜索
     // 要中文全名, 不要后面的括号和英文型号
-    var inputElement = document.querySelector('#devname');
-    inputElement.value = requiredDeviceInfoObj.name;
+    var inputElement = document.querySelector('#devname')
+    inputElement.value = requiredDeviceInfoObj.name
     // 点击搜索
-    var searchButtonElement = document.querySelector('#devname+span');
+    var searchButtonElement = document.querySelector('#devname+span')
     searchButtonElement.click();
-    document.querySelector('#status-bar-id').textContent = ('正在查找设备');
+    document.querySelector('#status-bar-id').textContent = ('正在查找设备')
 
     // 等待直到搜索结果刷新出来
     function _WaitUntilSearch() {
@@ -149,6 +161,9 @@ function Step2Calendar() {
     // 此页面中document定位的是页面内<iframe>内容, 因此要获取顶层代码文档
     const topDocument = window.top.document;
 
+
+
+    // 下面Step 1的_WaitCountdown 和 Step 2的_WaitUntilCalender同步运行
     // Step 1 等待倒计时结束, 点击确认
     // 是否已经点击标志, Step2会用到. false未点击|true已点击
     var isClickedConfirm = false
@@ -174,6 +189,7 @@ function Step2Calendar() {
     // 调用函数, 通过递归等待倒计时结束, 点击确认
     _WaitCountdown()
 
+
     // Step 2 根据日期点击预约
     // 等待直到日历刷新出来
     function _WaitUntilCalender() {
@@ -194,23 +210,23 @@ function Step2Calendar() {
 
                 // 若某日期不可用则跳到下一循环
                 if (unavailableKeywordList.some(keyword => strOnclickValue.includes(keyword))){
-                    continue;
+                    continue
                 }
 
                 // console.log(strOnclickValue);
 
                 // 使用正则表达式匹配参数, 参数按顺序放到列表中
                 // 形式如gourlsy('2024-01-15',0),
-                const matchList = /gourlsy\('([^']*)',(\d+)\)/.exec(strOnclickValue);
+                const matchList = /gourlsy\('([^']*)',(\d+)\)/.exec(strOnclickValue)
                 // 要第一个日期参数
                 availableDateList.push(matchList[1])
 
                 // 给相应标签增加id属性（再使用不用定位）
                 // book+日期, 形如book-2024-01-15
-                tableElemenet[i].id = 'book-' + matchList[1];
+                tableElemenet[i].id = 'book-' + matchList[1]
             }
 
-            // console.log(availableDateList);
+            // console.log(availableDateList)
 
             // 若用户设置日期可约, 则点击进入预约设置
             if (availableDateList.includes(requiredDeviceInfoObj.date)) {
@@ -222,23 +238,27 @@ function Step2Calendar() {
                 async function _WaitForConfirmation() {
                     while (!isClickedConfirm) {
                         await new Promise(resolve => setTimeout(resolve, 500))
-                        console.log("等待倒计时结束")
+                        topDocument.querySelector('#status-bar-id').textContent = ('等待倒计时结束')
+                        // console.log("等待倒计时结束")
                     }
-                    console.log("结束")
                     requiredDeviceInfoObj.bookProgress = 3
                     GM_setValue('requiredDeviceInfoObj', requiredDeviceInfoObj)
                     // 倒计时确认框结束, 可以点击选择日期点击
-                    document.querySelector('#book-' + requiredDeviceInfoObj.date).click();
+                    document.querySelector('#book-' + requiredDeviceInfoObj.date).click()
                 }
                 // 调用异步调用计时器
-                _WaitForConfirmation();
+                _WaitForConfirmation()
 
                 // 方法2. 不等倒计时结束, 直接点击
-                // 其实可以不等倒计时结束, 倒计时确认框结束
-                //document.querySelector('#book-' + requiredDeviceInfoObj.date).click();
+                // 其实可以不等
+                // requiredDeviceInfoObj.bookProgress = 3
+                // GM_setValue('requiredDeviceInfoObj', requiredDeviceInfoObj)
+                // document.querySelector('#book-' + requiredDeviceInfoObj.date).click()
+
 
             } else {
-                alert('预设日期无法预约')
+                topDocument.querySelector('#status-bar-id').textContent = ('预设日期无法预约, 脚本终止')
+                alert('预设日期无法预约, 脚本终止')
             }
 
 
@@ -258,183 +278,182 @@ function Step3Form() {
     if (!requiredDeviceInfoObj.bookProgress === 3) {
         return ;
     }
+
+    if (!window.location.pathname === '/model/yqkf/ResSubmitA.html') {
+        return ;
+    }
+
+    console.log('------第三步填表------')
     // 第三步填表, 点击提交
-    if (window.location.pathname === '/model/yqkf/ResSubmitA.html') {
-        console.log('------第三步填表------')
+    setTimeout(() => {
+        console.log('--------- 5s running -------------')
 
-        setTimeout(() => {
-            console.log('--------- 5s running -------------')
+        // 时间段, 先检查是否可约
+        // 调用选择时间的函数, 产生弹框
+        selecttime()
 
-            // 填写日期表单
-            // 年月日直接填
-            // console.log(document.querySelector('#YYKSD'))
-            document.querySelector('#YYKSD').value = '2024-01-15'
+        var availableStartTimeList = [] // 可预约的开始时间的列表
+        var timeDiff = -1 // 时间段长度, 单位毫秒
+        var timeLiElements = document.querySelectorAll('#timelist > li') // 时间段元素列表
+        for (var i=0; i<timeLiElements.length; i++) {
+            // 当前遍历到的时间段
+            var tempTime = timeLiElements[i]
 
-            // 时间段, 先检查是否可约
-            // 调用选择时间的函数, 产生弹框
-            selecttime()
-
-            var availableStartTimeList = [] // 可预约的开始时间的列表
-            var timeDiff = -1 // 时间段长度, 单位毫秒
-            var timeLiElements = document.querySelectorAll('#timelist > li') // 时间段元素列表
-            for (var i=0; i<timeLiElements.length; i++) {
-                // 当前遍历到的时间段
-                var tempTime = timeLiElements[i]
-
-                // 若该时间不可用, 则该元素的class='gq'
-                // 以此作为检验该时间是否可用
-                if ('gq'.includes(tempTime.classList)) {
-                    continue
-                }
-
-                console.log(tempTime.querySelector('span').textContent)
-                // 输入的时间字符串
-                const timeString = tempTime.querySelector('span').textContent
-
-                // 正则表达式, 用于分离【19:30 -- 20:00】两个时间
-                const regexPattern = /(\d{1,2}:\d{2})\s*--\s*(\d{1,2}:\d{2})/
-                // 使用正则表达式匹配时间字符串
-                const match = timeString.match(regexPattern)
-                if (match) {
-                    // 提取匹配的时间值
-                    const startTime = match[1]; // 开始时间
-                    const [startHour, startMinute] = startTime.split(":");
-                    const startDate = new Date(0, 0, 0, startHour, startMinute);
-                    availableStartTimeList.push(startDate)
-
-                    // 给可用时间段加id, 方便调用
-                    // 形式如time-index-0
-                    timeLiElements[i].id = 'time-index-' + (availableStartTimeList.length-1)
-
-                    // 计算时段间隔长度
-                    if (timeDiff < 0) {
-                        const endTime = match[2];
-                        const [endHour, endMinute] = endTime.split(":");
-                        const endDate = new Date(0, 0, 0, endHour, endMinute);
-                        const timeDiff = endDate - startDate;
-                    }
-                } else {
-                    console.log("未匹配到时间字符串");
-                }
+            // 若该时间不可用, 则该元素的class='gq'
+            // 以此作为检验该时间是否可用
+            if ('gq'.includes(tempTime.classList)) {
+                continue
             }
 
-            document.querySelector('#time-index-0').click();
+            console.log(tempTime.querySelector('span').textContent)
+            // 输入的时间字符串
+            const timeString = tempTime.querySelector('span').textContent
+
+            // 正则表达式, 用于分离【19:30 -- 20:00】两个时间
+            const regexPattern = /(\d{1,2}:\d{2})\s*--\s*(\d{1,2}:\d{2})/
+            // 使用正则表达式匹配时间字符串
+            const match = timeString.match(regexPattern)
+            if (match) {
+                // 提取匹配的时间值
+                const startTime = match[1]; // 开始时间
+                const [startHour, startMinute] = startTime.split(":");
+                const startDate = new Date(0, 0, 0, startHour, startMinute);
+                availableStartTimeList.push(startDate)
+
+                // 给可用时间段加id, 方便调用
+                // 形式如time-index-0
+                timeLiElements[i].id = 'time-index-' + (availableStartTimeList.length-1)
+
+                // 计算时段间隔长度
+                if (timeDiff < 0) {
+                    const endTime = match[2];
+                    const [endHour, endMinute] = endTime.split(":");
+                    const endDate = new Date(0, 0, 0, endHour, endMinute);
+                    timeDiff = endDate - startDate;
+                }
+            } else {
+                console.log("未匹配到时间字符串");
+            }
+        }
+
+        document.querySelector('#time-index-0').click();
 
 
-            console.log(availableStartTimeList)
-            console.log('done');
-        }, 2000);
+        console.log(availableStartTimeList)
+        console.log('done');
+    }, 2000);
 
-    }
 
 }
 
 // 设置信息窗口
 function SidebarSetting(){
     // 创建侧边栏容器
-    const sidebarContainer = document.createElement('div');
-    sidebarContainer.className = 'sidebar';
+    const sidebarContainer = document.createElement('div')
+    sidebarContainer.className = 'sidebar'
     sidebarContainer.style = 'position: fixed; top: 0;left: 0;width: 260px;height: 100%;background-color: #f8f9fa;padding: 20px;box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);z-index: 9999;overflow-y: auto;'
 
     // 标题栏
-    const header = document.createElement('div');
-    header.className = 'sidebar-header';
-    header.innerHTML = '<h3>设备是俺滴</h3><hr>';
-    sidebarContainer.appendChild(header);
+    const header = document.createElement('div')
+    header.className = 'sidebar-header'
+    header.innerHTML = '<h3>设备是俺滴</h3><hr>'
+    sidebarContainer.appendChild(header)
 
     // 状态栏
-    const statusBar = document.createElement('div');
-    statusBar.className = 'status-bar';
-    statusBar.textContent = '正在设置预约参数...';
+    const statusBar = document.createElement('div')
+    statusBar.className = 'status-bar'
+    statusBar.textContent = '正在设置预约参数...'
     statusBar.style = 'margin-top: 20px; padding: 10px;background-color: #e9ecef;'
     statusBar.id = 'status-bar-id'
-    sidebarContainer.appendChild(statusBar);
+    sidebarContainer.appendChild(statusBar)
 
     // 插入分割线
-    sidebarContainer.appendChild(document.createElement('hr'));
+    sidebarContainer.appendChild(document.createElement('hr'))
 
     // 勾选框1
-    const checkbox1 = createCheckbox('checkbox1', '请确认是否已经登陆');
-    sidebarContainer.appendChild(checkbox1);
+    const checkbox1 = createCheckbox('checkbox1', '请确认是否已经登陆')
+    sidebarContainer.appendChild(checkbox1)
 
     // 勾选框2
-    const checkbox2 = createCheckbox('checkbox2', '请确认下面信息已经填写');
-    sidebarContainer.appendChild(checkbox2);
+    const checkbox2 = createCheckbox('checkbox2', '请确认下面信息已经填写')
+    sidebarContainer.appendChild(checkbox2)
 
     // 插入分割线
-    sidebarContainer.appendChild(document.createElement('hr'));
+    sidebarContainer.appendChild(document.createElement('hr'))
 
     // 信息填写框1
-    const input1 = createInput('input1', '设备名', '如, 差热分析仪');
-    sidebarContainer.appendChild(input1);
+    const input1 = createInput('input1', '设备名', '如, 差热分析仪')
+    sidebarContainer.appendChild(input1)
     sidebarContainer.querySelector('#input1').value = requiredDeviceInfoObj.name
 
 
     // 信息填写框2
-    const input2 = createInput('input2', '预约时间');
-    sidebarContainer.appendChild(input2);
+    const input2 = createInput('input2', '预约时间')
+    sidebarContainer.appendChild(input2)
     sidebarContainer.querySelector('#input2').type = 'date'
     sidebarContainer.querySelector('#input2').value = requiredDeviceInfoObj.date
 
     // 信息填写框3
-    const input3 = createInput('input3', '开始时间');
-    sidebarContainer.appendChild(input3);
+    const input3 = createInput('input3', '开始时间')
+    sidebarContainer.appendChild(input3)
     sidebarContainer.querySelector('#input3').type = 'time'
     sidebarContainer.querySelector('#input3').value = requiredDeviceInfoObj.formInfo.startTime
 
     // 信息填写框4
-    const input4 = createInput('input4', '结束时间');
-    sidebarContainer.appendChild(input4);
+    const input4 = createInput('input4', '结束时间')
+    sidebarContainer.appendChild(input4)
     sidebarContainer.querySelector('#input4').type = 'time'
     sidebarContainer.querySelector('#input4').value = requiredDeviceInfoObj.formInfo.endTime
 
     // 信息填写框5
-    const input5 = createInput('input5', '电话', '110');
-    sidebarContainer.appendChild(input5);
+    const input5 = createInput('input5', '电话', '110')
+    sidebarContainer.appendChild(input5)
     sidebarContainer.querySelector('#input5').type = 'tel'
     sidebarContainer.querySelector('#input5').value = requiredDeviceInfoObj.formInfo.phone
 
     // 信息填写框6
-    const input6 = createInput('input6', '邮箱', '123@163.com');
-    sidebarContainer.appendChild(input6);
+    const input6 = createInput('input6', '邮箱', '123@163.com')
+    sidebarContainer.appendChild(input6)
     sidebarContainer.querySelector('#input6').type = 'email'
     sidebarContainer.querySelector('#input6').value = requiredDeviceInfoObj.formInfo.mail
 
     // 信息填写框7
-    const input7 = createInput('input7', '样品名', '样品1');
-    sidebarContainer.appendChild(input7);
+    const input7 = createInput('input7', '样品名', '样品1')
+    sidebarContainer.appendChild(input7)
     sidebarContainer.querySelector('#input7').value = requiredDeviceInfoObj.formInfo.sample.length>0 ? requiredDeviceInfoObj.formInfo.sample[0][0] : ''
 
     // 信息填写框8
-    const input8 = createInput('input8', '样品数量', 123);
+    const input8 = createInput('input8', '样品数量', 123)
     sidebarContainer.appendChild(input8);
     sidebarContainer.querySelector('#input8').type = 'number'
     sidebarContainer.querySelector('#input8').value = requiredDeviceInfoObj.formInfo.sample.length>0 ? requiredDeviceInfoObj.formInfo.sample[0][0] : ''
 
     // 插入分割线
-    sidebarContainer.appendChild(document.createElement('hr'));
+    sidebarContainer.appendChild(document.createElement('hr'))
 
     // 提交按钮
     // 现在开抢
-    const Button1 = createButton('现在开抢', BookNow);
-    sidebarContainer.appendChild(Button1);
+    const Button1 = createButton('现在开抢', ClickBookNow)
+    sidebarContainer.appendChild(Button1)
 
     // 插入分割线
-    sidebarContainer.appendChild(document.createElement('hr'));
+    sidebarContainer.appendChild(document.createElement('hr'))
 
     // 日期时间选择表单
-    const dateTimeForm = createInput('input9', '开抢时间', 123);
-    sidebarContainer.appendChild(dateTimeForm);
+    const dateTimeForm = createInput('input9', '开抢时间', 123)
+    sidebarContainer.appendChild(dateTimeForm)
     sidebarContainer.querySelector('#input9').type = 'datetime-local'
     // sidebarContainer.querySelector('#input9').value = requiredDeviceInfoObj.bookTime
 
     // 定时开抢
-    const Button2 = createButton('定时开抢', BookByTime);
+    const Button2 = createButton('定时开抢', ClickBookByTime);
     sidebarContainer.appendChild(Button2);
 
+    // 插入分割线
+    sidebarContainer.appendChild(document.createElement('hr'))
 
     // 终止预约
-    const Button3 = createButton('终止预约', StopBook);
+    const Button3 = createButton('终止预约', ClickStopBook);
     sidebarContainer.appendChild(Button3);
 
     // 将侧边栏插入到原始页面中
@@ -442,39 +461,39 @@ function SidebarSetting(){
     document.body.appendChild(sidebarContainer);
 
     // 辅助函数，创建勾选框
-    function createCheckbox(id, label) {
+    function createCheckbox(id, strLabel) {
         const checkbox = document.createElement('div');
         checkbox.className = 'form-check';
         checkbox.innerHTML = `<input class="form-check-input" type="checkbox" value="" id="${id}">
-                          <label class="form-check-label" for="${id}">${label}</label>`;
+                          <label class="form-check-label" for="${id}">${strLabel}</label>`;
         return checkbox;
     }
 
     // 辅助函数，创建信息填写框
     function createInput(id, strLabel, strPlaceholder) {
-        const inputContainer = document.createElement('div');
-        inputContainer.className = 'input-group mb-3';
+        const inputContainer = document.createElement('div')
+        inputContainer.className = 'input-group mb-3'
         inputContainer.innerHTML = `<label for="${id}" style="width: 85px;">${strLabel}</label>
-                <input type="text" id="${id}" class="form-control" placeholder="${strPlaceholder}" required>`;
+                <input type="text" id="${id}" class="form-control" placeholder="${strPlaceholder}" required>`
 
-        return inputContainer;
+        return inputContainer
     }
 
     // 辅助函数，创建按钮
-    function createButton(text, clickFunc) {
-        const buttonDiv = document.createElement('div');
-        buttonDiv.className = 'd-grid gap-2 col-8 mx-auto';
-        const button = document.createElement('button');
-        button.textContent = text;
-        button.className = `btn btn-primary`;
-        button.addEventListener('click', clickFunc);
+    function createButton(strText, clickFunc) {
+        const buttonDiv = document.createElement('div')
+        buttonDiv.className = 'd-grid gap-2 col-8 mx-auto'
+        const button = document.createElement('button')
+        button.textContent = strText
+        button.className = `btn btn-primary`
+        button.addEventListener('click', clickFunc)
         buttonDiv.appendChild(button)
-        return buttonDiv;
+        return buttonDiv
     }
 
     // 现在开抢
-    function BookNow() {
-        console.log('现在开抢')
+    function ClickBookNow() {
+        console.log('*现在开抢*')
 
         // 要预约的设备信息
         requiredDeviceInfoObj = {
@@ -506,7 +525,7 @@ function SidebarSetting(){
     }
 
     // 定时开抢
-    function BookByTime() {
+    function ClickBookByTime() {
         console.log('定时开抢')
         if (new Date(document.querySelector('#input9').value) < new Date()) {
             alert('抢设备时间已过, 请重新设置');
@@ -534,9 +553,9 @@ function SidebarSetting(){
 
         GM_setValue('requiredDeviceInfoObj', requiredDeviceInfoObj)
 
-        //if (window.location.pathname != '/model/yqkf/equipmentlist.html') {
-            //window.location.href = 'http://eqshare.just.edu.cn/model/yqkf/equipmentlist.html';
-        //}
+        if (document.location.pathname != '/model/yqkf/equipmentlist.html') {
+            document.location.href = 'http://eqshare.just.edu.cn/model/yqkf/equipmentlist.html';
+        }
 
         // 调用函数, 通过递归等待直到搜索结果刷新出来
         WaitStart();
@@ -544,8 +563,8 @@ function SidebarSetting(){
     }
 
     // 终止预约
-    function StopBook() {
-        console.log('终止预约')
+    function ClickStopBook() {
+        console.log('*终止预约*')
 
         // 设置终止预约标志
         requiredDeviceInfoObj.bookProgress = -1 // 预约进度.  -1不抢|0等待定时预约|1搜索设备送样检测|2日历选择|3填表提交|4完成
@@ -583,9 +602,7 @@ function BuildDeviceInfoList(listElements) {
 
     for (var i = 0; i < listElements.length; i++) {
         // 定位到【送样检测】/【自主上机】按钮
-        var deviceBookButtonElement = listElements[i].querySelector('.btn_compoment span .layui-btn-warm, .btn_compoment span .layui-btn-normal');
-        // 点击按钮
-        // deviceBookButtonElement.click();
+        var deviceBookButtonElement = listElements[i].querySelector('.btn_compoment span .layui-btn-warm, .btn_compoment span .layui-btn-normal')
         // 输出找到的元素
         // console.log(deviceBookButtonElement);
 
